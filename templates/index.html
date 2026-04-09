@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>RiC-O Graph View</title>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #fdfdfd; margin: 0; padding: 0; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
+        
+        .header { height: 60px; padding: 0 20px; box-sizing: border-box; background: #2c3e50; color: white; display: flex; align-items: center; justify-content: space-between; z-index: 10; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .header-left { display: flex; align-items: flex-end; height: 100%; }
+        .header h2 { margin: 0; font-size: 20px; align-self: center; padding-right: 30px; }
+        
+        .tabs { display: flex; gap: 5px; align-self: flex-end; }
+        .tab { padding: 12px 24px; font-size: 15px; font-weight: bold; cursor: pointer; color: #a4b0be; border-radius: 8px 8px 0 0; background: #34495e; transition: 0.2s; margin-bottom: 0; }
+        .tab.active { background: #fdfdfd; color: #2c3e50; box-shadow: 0 -2px 5px rgba(0,0,0,0.1); }
+        .tab:hover:not(.active) { color: white; background: #3e5368; }
+
+        .search-container { display: flex; gap: 8px; align-items: center; }
+        
+        .legend-panel { position: absolute; left: 20px; top: 20px; width: 210px; background: rgba(255, 255, 255, 0.95); border: 1px solid #ddd; border-radius: 8px; padding: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); z-index: 5; }
+        .legend-panel h3 { margin-top: 0; font-size: 16px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+        .legend-section { margin-bottom: 15px; }
+        .legend-section h4 { margin: 0 0 10px 0; font-size: 14px; color: #555; }
+        
+        .legend-item { display: flex; align-items: center; margin-bottom: 8px; font-size: 13px; font-weight: 500; }
+        .node-color { width: 16px; height: 16px; border-radius: 4px; margin-right: 10px; border: 1px solid rgba(0,0,0,0.1); }
+        .edge-color { width: 20px; height: 4px; margin-right: 10px; }
+        
+        .count-badge { margin-left: auto; color: #e74c3c; font-weight: bold; font-size: 12px; background: #fff0f0; padding: 2px 6px; border-radius: 10px; }
+
+        .toggle-btn.active-and { background: #3498db; color: white; }
+        .toggle-btn.active-or { background: #e67e22; color: white; }
+        .adv-input { padding: 6px 10px; border-radius: 4px; border: 1px solid #95a5a6; outline: none; background: #ffffff; font-size: 13px; color: #2c3e50; }
+        .adv-input:focus { border-color: #3498db; }
+
+        /* Popup Modal Styles */
+        .node-popup-overlay { display: none !important; }
+        .node-popup { display: none; position: absolute; top: 80px; right: 370px; width: 360px; background: #1b2631; color: #d1d8e0; border-radius: 12px; padding: 24px; box-shadow: 0 15px 40px rgba(0,0,0,0.4); z-index: 1000; }
+        .node-popup-header { display: flex; justify-content: space-between; align-items: center; font-size: 20px; font-weight: bold; color: #ffffff; margin-bottom: 20px; line-height:1.2; }
+        .node-popup-close { cursor: pointer; font-size: 24px; color: #a4b0be; transition: color 0.2s; }
+        .node-popup-close:hover { color: #ff4757; }
+        .node-popup-subtitle { font-size: 15px; font-weight: bold; color: #ff9f43; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+        .node-popup-content { font-size: 15px; line-height: 1.6; margin-bottom: 25px; color: #dcdde1; }
+        .keyword-highlight { color: #ffffff; font-weight: bold; }
+        .node-popup-footer { font-size: 13px; color: #7f8fa6; border-top: 1px solid rgba(255,255,255,0.15); padding-top: 15px; font-family: monospace; }
+        
+        .chat-input:focus { border-color: #3498db !important; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-left">
+            <h2>RiC-O Network</h2>
+            <div class="tabs">
+                <div id="tab-record" class="tab active" onclick="switchTab('record')">📚 기록물 검색</div>
+                <div id="tab-knowledge" class="tab" onclick="switchTab('knowledge')">🧠 지식 검색</div>
+            </div>
+        </div>
+        <div class="search-container">
+            <!-- Emptied old search container -->
+        </div>
+    </div>
+    
+    <div id="advanced-search-panel" style="background:#dee2e6; color:#2c3e50; padding:10px 20px; display:flex; align-items:center; gap:15px; font-size:13px; z-index:9; border-top:1px solid #ced4da; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+        <div style="font-weight:bold; font-size:15px; margin-right:5px; color:#2c3e50;">🔍 다중 조건 필터</div>
+        
+        <div style="display:flex; align-items:center; background:#bdc3c7; border-radius:15px; padding:2px;">
+            <input type="radio" id="op_and" name="filterOp" value="AND" checked style="display:none;">
+            <label for="op_and" class="toggle-btn active-and" onclick="setOp('AND')" style="padding:4px 12px; cursor:pointer; border-radius:15px; font-weight:bold;">AND</label>
+            <input type="radio" id="op_or" name="filterOp" value="OR" style="display:none;">
+            <label for="op_or" class="toggle-btn" onclick="setOp('OR')" style="padding:4px 12px; cursor:pointer; border-radius:15px; font-weight:bold;">OR</label>
+        </div>
+
+        <div style="display:flex; gap:8px; flex:1;">
+            <input type="text" id="flt_record" class="adv-input" placeholder="기록물건..." style="width:14%;" onkeydown="if(event.key === 'Enter') applyAdvancedFilter()">
+            <input type="text" id="flt_org" class="adv-input" placeholder="기관명..." style="width:14%;" onkeydown="if(event.key === 'Enter') applyAdvancedFilter()">
+            <input type="text" id="flt_date" class="adv-input" placeholder="생산년도..." style="width:10%;" onkeydown="if(event.key === 'Enter') applyAdvancedFilter()">
+            <input type="text" id="flt_agent" class="adv-input" placeholder="담당자..." style="width:12%;" onkeydown="if(event.key === 'Enter') applyAdvancedFilter()">
+            <input type="text" id="flt_act" class="adv-input" placeholder="단위과제..." style="width:14%;" onkeydown="if(event.key === 'Enter') applyAdvancedFilter()">
+        </div>
+        
+        <button onclick="applyAdvancedFilter()" style="background:#27ae60; color:white; border:none; padding:7px 18px; border-radius:4px; font-weight:bold; cursor:pointer;">적용</button>
+        <button onclick="resetHardFilter()" style="background:#7f8fa6; color:white; border:none; padding:7px 18px; border-radius:4px; font-weight:bold; cursor:pointer;">초기화</button>
+    </div>
+
+    <!-- Popup Modal -->
+    <div id="nodePopup" class="node-popup">
+        <div class="node-popup-header">
+            <span id="popupTitle">💡 제목</span>
+            <span class="node-popup-close" onclick="closePopup()">&times;</span>
+        </div>
+        <div class="node-popup-subtitle" id="popupSubtitle">🎯 핵심 개념 (<span id="popupTypeEng">Entity</span>)</div>
+        <div class="node-popup-content" id="popupContent">내용</div>
+        <div class="node-popup-footer" id="popupFooter">ID: ENT_XXXX</div>
+    </div>
+
+    <div style="display: flex; flex-direction: row; flex: 1; min-height: 0;">
+        <!-- Main Area (Network + Timeline) -->
+        <div style="flex: 1; display:flex; flex-direction: column; position: relative;">
+            
+            <div class="legend-panel" id="legendArea">
+                <!-- Dynamically Rendered via JS -->
+            </div>
+            
+            <div id="network" style="flex: 1; min-height: 0; background: #ffffff;"></div>
+            
+        </div>
+
+        <!-- Chatbot Panel -->
+        <div id="chat-panel" style="width: 350px; background: #ecf0f1; border-left: 1px solid #bdc3c7; display: flex; flex-direction: column;">
+            <div style="background: #34495e; color: white; padding: 15px; font-weight: bold; font-size: 16px;">
+                🤖 Graph-RAG 어시스턴트
+            </div>
+            <div id="chatHistory" style="flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;">
+                <div style="align-self: flex-start; background: #ffffff; padding: 12px 16px; border-radius: 12px; border: 1px solid #ddd; max-width: 85%; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); line-height: 1.4;">
+                    안녕하세요! 아카이브 지식망 검색 봇입니다. 탭에서 원하시는 데이터셋을 선택 후 자연어로 질문해주세요.
+                </div>
+            </div>
+            <div style="padding: 15px; background: #ffffff; border-top: 1px solid #ddd; display: flex; gap: 8px;">
+                <input type="text" id="chatInput" class="chat-input" placeholder="여기에 질문 입력..." style="flex: 1; padding: 10px 14px; border: 1px solid #ccc; border-radius: 20px; outline: none; font-size: 14px;" onkeydown="if(event.key==='Enter') sendChat()">
+                <button onclick="sendChat()" style="background: #2ecc71; color: white; border: none; border-radius: 50%; width: 40px; height: 40px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size:18px;">
+                    ➤
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <script type="text/javascript">
+        var network = null;
+        var nodesDataSet = null;
+        var edgesDataSet = null;
+        var currentTab = 'record';
+
+        var recordConf = {
+            labelMap: {"RecordResource": "기록물", "Agent": "담당자", "Activity": "단위과제", "Mandate": "관련법령", "Date": "생산년도", "Organization": "기관명"},
+            edgeMap: {"hasCreator": "생산자", "isAssociatedWithEvent": "관련_업무", "isRegulatedBy": "근거법령", "hasDate": "생산년도", "isOwnedBy": "소속기관"},
+            nodeColors: {"RecordResource": "#0984e3", "Agent": "#e84393", "Activity": "#00b894", "Mandate": "#d63031", "Date": "#e67e22", "Organization": "#747d8c"},
+            edgeColors: {"hasCreator": { color: "#74b9ff", width: 1.5 }, "isAssociatedWithEvent": { color: "#fdcb6e", width: 3.5 }, "isRegulatedBy": { color: "#74b9ff", width: 1.5 }, "hasDate": { color: "#74b9ff", width: 1.5 }, "isOwnedBy": { color: "#74b9ff", width: 1.5 }}
+        };
+
+        var knowledgeConf = {
+            labelMap: {"Document": "문서", "Chunk": "청크(문단)", "Entity": "엔티티", "Law": "법령", "Article": "조항", "Department": "부서", "Judgment": "판례"},
+            edgeMap: {"HAS_CHUNK": "포함_문단", "MENTIONS": "언급함", "HAS_ARTICLE": "포함_조항", "RELATED_TO": "관련_법"},
+            nodeColors: {"Document": "#8e44ad", "Chunk": "#3498db", "Entity": "#f1c40f", "Law": "#c0392b", "Article": "#e67e22", "Department": "#27ae60", "Judgment": "#34495e"},
+            edgeColors: {"HAS_CHUNK": { color: "#bdc3c7", width: 1 }, "MENTIONS": { color: "#e74c3c", width: 2.5 }, "HAS_ARTICLE": { color: "#f39c12", width: 1.5 }, "RELATED_TO": { color: "#2ecc71", width: 2.5 }}
+        };
+
+        function switchTab(tabId) {
+            if(currentTab === tabId) return;
+            currentTab = tabId;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.getElementById('tab-' + tabId).classList.add('active');
+            closePopup();
+            loadGraph();
+        }
+
+        function renderLegend(conf, counts) {
+            var html = '<h3>범례 (Legend)</h3><div class="legend-section"><h4>노드 (엔티티)</h4>';
+            for(let key in conf.labelMap) {
+                let count = counts.nodes[key] || 0;
+                html += `<div class="legend-item"><div class="node-color" style="background:${conf.nodeColors[key]}"></div>${conf.labelMap[key]} <span class="count-badge">${count}건</span></div>`;
+            }
+            html += '</div><div class="legend-section" style="border-top:1px solid #eee; padding-top:15px;"><h4>관계선 (엣지)</h4>';
+            for(let key in conf.edgeMap) {
+                let color = conf.edgeColors[key] ? conf.edgeColors[key].color : "#888";
+                let count = counts.edges[key] || 0;
+                html += `<div class="legend-item"><div class="edge-color" style="background:${color}"></div>${conf.edgeMap[key]} <span class="count-badge">${count}건</span></div>`;
+            }
+            html += '</div>';
+            document.getElementById('legendArea').innerHTML = html;
+        }
+
+        function loadGraph() {
+            var conf = currentTab === 'record' ? recordConf : knowledgeConf;
+            
+            fetch('/api/graph?type=' + currentTab)
+                .then(response => { if(!response.ok) throw new Error("서버 에러 발생"); return response.json(); })
+                .then(data => {
+                    var container = document.getElementById('network');
+                    
+                    var counts = { nodes: {}, edges: {} };
+                    
+                    var parsedNodes = (data.nodes || []).map(n => {
+                        var color = conf.nodeColors[n.label] || "#95a5a6"; 
+                        var koLabel = conf.labelMap[n.label] || n.label;
+                        var fullTitle = (n.title || n.id) + "";
+                        var shortTitle = fullTitle;
+                        
+                        if (currentTab === 'record' && n.label === "RecordResource") {
+                            var m = shortTitle.match(/(\d{3})$/);
+                            shortTitle = m ? "문서-" + m[1] : shortTitle.substring(0, 5);
+                        } else if (shortTitle.length > 5) {
+                            shortTitle = shortTitle.substring(0, 5) + "..";
+                        }
+                        
+                        counts.nodes[n.label] = (counts.nodes[n.label] || 0) + 1;
+                        
+                        return { 
+                            id: n.id, label: shortTitle + "\n(" + koLabel + ")", title: "💡 " + fullTitle, originalTitle: fullTitle, nodeType: n.label, nodeKoType: koLabel,
+                            color: { background: color, border: 'rgba(255,255,255,0.8)', highlight: { background: color, border: '#ffeaa7' } }, shape: 'circle', margin: 10, widthConstraint: { minimum: 75, maximum: 75 }, font: { size: 12, color: '#ffffff', face: 'arial', bold: true } 
+                        };
+                    });
+                    
+                    var parsedEdges = (data.edges || []).map(e => {
+                        var koEdge = conf.edgeMap[e.label] || e.label;
+                        var style = conf.edgeColors[e.label] || { color: "#888", width: 1 };
+                        counts.edges[e.label] = (counts.edges[e.label] || 0) + 1;
+                        return { 
+                            from: e.from, to: e.to, label: koEdge, width: style.width, color: { color: style.color, highlight: '#0984e3' }, font: { align: 'middle', size: 11, color: '#2d3436', background: 'rgba(255,255,255,0.7)', strokeWidth: 0 }
+                        };
+                    });
+
+                    renderLegend(conf, counts);
+
+                    if(!network) {
+                        var options = {
+                            interaction: { hover: true },
+                            edges: { arrows: 'to', smooth: { type: 'continuous' } },
+                            nodes: { borderWidth: 2, borderWidthSelected: 4 },
+                            physics: { solver: 'forceAtlas2Based', forceAtlas2Based: { gravitationalConstant: -80, centralGravity: 0.005, springLength: 250, springConstant: 0.02, damping: 0.85, avoidOverlap: 0.2 }, stabilization: { iterations: 300, fit: true } }
+                        };
+                        nodesDataSet = new vis.DataSet(parsedNodes);
+                        edgesDataSet = new vis.DataSet(parsedEdges);
+                        network = new vis.Network(container, {nodes: nodesDataSet, edges: edgesDataSet}, options);
+                        network.on("click", function (params) { if (params.nodes.length > 0) openPopup(params.nodes[0]); else closePopup(); });
+                    } else {
+                        nodesDataSet.clear();
+                        edgesDataSet.clear();
+                        nodesDataSet.add(parsedNodes);
+                        edgesDataSet.add(parsedEdges);
+                    }
+                })
+                .catch(err => { console.error(err); alert("데이터 로드 에러"); });
+        }
+
+        // Initialize App
+        window.onload = function() { loadGraph(); }
+
+        var filterHiddenNodes = [];
+        var filterOp = "AND";
+        
+        function setOp(op) {
+            filterOp = op;
+            document.querySelector("label[for='op_and']").className = op === 'AND' ? 'toggle-btn active-and' : 'toggle-btn';
+            document.querySelector("label[for='op_or']").className = op === 'OR' ? 'toggle-btn active-or' : 'toggle-btn';
+        }
+
+        function applyAdvancedFilter() {
+            if(!nodesDataSet || !edgesDataSet) return;
+            
+            var conditions = {
+                "RecordResource": document.getElementById('flt_record').value.trim().toLowerCase(),
+                "Organization": document.getElementById('flt_org').value.trim().toLowerCase(),
+                "Date": document.getElementById('flt_date').value.trim().toLowerCase(),
+                "Agent": document.getElementById('flt_agent').value.trim().toLowerCase(),
+                "Activity": document.getElementById('flt_act').value.trim().toLowerCase()
+            };
+            
+            var activeKeys = Object.keys(conditions).filter(k => conditions[k] !== "");
+            
+            resetHardFilter(false);
+            
+            if(activeKeys.length === 0) {
+                network.unselectAll();
+                network.fit({ animation: { duration: 1000 } });
+                return;
+            }
+
+            var matchedIdsByType = {};
+            activeKeys.forEach(k => matchedIdsByType[k] = new Set());
+            
+            nodesDataSet.forEach(node => {
+                activeKeys.forEach(k => {
+                    if (node.nodeType === k) {
+                        var text = node.originalTitle ? node.originalTitle.toLowerCase() : "";
+                        var lbl = node.label ? node.label.toLowerCase() : "";
+                        if (text.includes(conditions[k]) || lbl.includes(conditions[k])) {
+                            matchedIdsByType[k].add(node.id);
+                        }
+                    }
+                });
+            });
+
+            var finalVisibleNodes = new Set();
+            var adjacency = {};
+            nodesDataSet.forEach(n => { adjacency[n.id] = new Set(); });
+            edgesDataSet.forEach(e => {
+                if(adjacency[e.from]) adjacency[e.from].add(e.to);
+                if(adjacency[e.to]) adjacency[e.to].add(e.from);
+            });
+            
+            if (filterOp === "OR") {
+                var allMatchedIds = new Set();
+                activeKeys.forEach(k => {
+                    matchedIdsByType[k].forEach(id => allMatchedIds.add(id));
+                });
+                
+                finalVisibleNodes = new Set(allMatchedIds);
+                edgesDataSet.forEach(e => {
+                    if(allMatchedIds.has(e.from)) finalVisibleNodes.add(e.to);
+                    if(allMatchedIds.has(e.to)) finalVisibleNodes.add(e.from);
+                });
+            } else {
+                nodesDataSet.forEach(node => {
+                    var satisfiesAll = true;
+                    for (let i = 0; i < activeKeys.length; i++) {
+                        let k = activeKeys[i];
+                        let keyNodes = matchedIdsByType[k];
+                        let satisfiedThis = false;
+                        if (keyNodes.has(node.id)) {
+                            satisfiedThis = true;
+                        } else if (adjacency[node.id]) {
+                            for (let n of adjacency[node.id]) {
+                                if(keyNodes.has(n)) {
+                                    satisfiedThis = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!satisfiedThis) {
+                            satisfiesAll = false;
+                            break;
+                        }
+                    }
+                    if (satisfiesAll) {
+                        finalVisibleNodes.add(node.id);
+                        if(adjacency[node.id]) {
+                            adjacency[node.id].forEach(n => finalVisibleNodes.add(n));
+                        }
+                    }
+                });
+            }
+            
+            if(finalVisibleNodes.size === 0) {
+                alert("조건에 일치하는 결과가 없습니다. (연결망 부족)");
+                return;
+            }
+            
+            var nodesToHide = [];
+            nodesDataSet.forEach(n => {
+                if(!finalVisibleNodes.has(n.id)) nodesToHide.push(n.id);
+            });
+
+            var nodeUpdates = nodesToHide.map(id => ({id: id, hidden: true}));
+            nodesDataSet.update(nodeUpdates);
+            filterHiddenNodes = nodesToHide;
+            
+            network.unselectAll();
+            network.fit({ nodes: Array.from(finalVisibleNodes), animation: { duration: 1000 } });
+        }
+
+        function resetHardFilter(visualUpdate = true) {
+            if(filterHiddenNodes.length > 0) {
+                var nodeUpdates = filterHiddenNodes.map(id => ({id: id, hidden: false}));
+                nodesDataSet.update(nodeUpdates);
+                filterHiddenNodes = [];
+            }
+            if(visualUpdate) {
+                document.getElementById('flt_record').value = "";
+                document.getElementById('flt_org').value = "";
+                document.getElementById('flt_date').value = "";
+                document.getElementById('flt_agent').value = "";
+                document.getElementById('flt_act').value = "";
+                network.unselectAll();
+                network.fit({ animation: { duration: 1000 } });
+            }
+        }
+
+        function openPopup(nodeId) {
+            var node = nodesDataSet.get(nodeId);
+            if(!node) return;
+            document.getElementById("popupTitle").innerHTML = "💡 " + node.originalTitle;
+            document.getElementById("popupSubtitle").innerHTML = "🎯 핵심 파싱 개념 (" + node.nodeKoType + ")";
+            document.getElementById("popupFooter").innerHTML = "ID: " + node.id;
+            var desc = "데이터베이스에서 파생된 <span class='keyword-highlight'>'" + node.originalTitle + "'</span> 노드입니다.<br><br>";
+            
+            if(currentTab === 'record') {
+                if(node.nodeType === "RecordResource") desc += "배후 메타데이터 관리가 적용된 아카이브 <b>기록물</b> 객체입니다.";
+                else if(node.nodeType === "Agent") desc += "비즈니스를 수행한 <b>담당자(행위자)</b> 노드입니다.";
+                else if(node.nodeType === "Activity") desc += "문서가 탄생하게 된 근본적인 <b>비즈니스 업무</b>입니다.";
+                else if(node.nodeType === "Mandate") desc += "규제/집행 근거가 되는 <b>법령</b>입니다.";
+                else desc += "연결망 알고리즘이 분석한 공통 속성 노드입니다.";
+            } else {
+                if(node.nodeType === "Document") desc += "지식 베이스에 적재된 <b>레거시 문서 원본</b>입니다.";
+                else if(node.nodeType === "Chunk") desc += "텍스트 분할에 의해 생성된 <b>벡터 청크(문단)</b> 객체입니다.";
+                else if(node.nodeType === "Law") desc += "기존에 운영 중이던 법령 체계 지식 노드입니다.";
+                else desc += "고급 RAG 검색에서 참조하는 연결망 엔티티 구조입니다.";
+            }
+            
+            document.getElementById("popupContent").innerHTML = desc;
+            document.getElementById("nodePopup").style.display = "block";
+        }
+        function closePopup() { document.getElementById("nodePopup").style.display = "none"; }
+
+        // Chatbot 
+        function sendChat() {
+            var input = document.getElementById("chatInput");
+            var query = input.value.trim();
+            if(!query) return;
+            
+            var history = document.getElementById("chatHistory");
+            var userDiv = document.createElement("div");
+            userDiv.style.cssText = "align-self: flex-end; background: #3498db; color: white; padding: 10px 14px; border-radius: 12px; max-width: 85%; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);";
+            userDiv.innerText = query;
+            history.appendChild(userDiv);
+            input.value = "";
+            history.scrollTop = history.scrollHeight;
+            
+            var typingDiv = document.createElement("div");
+            typingDiv.style.cssText = "align-self: flex-start; padding: 5px 14px; font-size: 12px; color: #7f8fa6;";
+            typingDiv.innerText = "분석 중...";
+            history.appendChild(typingDiv);
+            
+            fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: query, type: currentTab }) })
+            .then(res => res.json())
+            .then(data => {
+                history.removeChild(typingDiv);
+                var botDiv = document.createElement("div");
+                botDiv.style.cssText = "align-self: flex-start; background: #ffffff; padding: 12px 16px; border-radius: 12px; border: 1px solid #ddd; max-width: 85%; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); line-height: 1.5; color: #2c3e50;";
+                botDiv.innerHTML = "💡 " + data.answer;
+                
+                resetHardFilter(false);
+                
+                if(data.focus_nodes && data.focus_nodes.length > 0) {
+                    var validIds = [];
+                    data.focus_nodes.forEach(id => {
+                        if(nodesDataSet.get(id)) validIds.push(id);
+                    });
+                    
+                    if(validIds.length > 0) {
+                        var finalVisibleNodes = new Set();
+                        var adjacency = {};
+                        nodesDataSet.forEach(n => { adjacency[n.id] = new Set(); });
+                        edgesDataSet.forEach(e => {
+                            if(adjacency[e.from]) adjacency[e.from].add(e.to);
+                            if(adjacency[e.to]) adjacency[e.to].add(e.from);
+                        });
+
+                        if (validIds.length === 1) {
+                            let root = validIds[0];
+                            finalVisibleNodes.add(root);
+                            if (adjacency[root]) {
+                                adjacency[root].forEach(neighbor => {
+                                    finalVisibleNodes.add(neighbor);
+                                    // 2-hop expansion to show the record's full context (Year, Org, File etc.)
+                                    if (adjacency[neighbor]) {
+                                        adjacency[neighbor].forEach(n2 => finalVisibleNodes.add(n2));
+                                    }
+                                });
+                            }
+                        } else {
+                            nodesDataSet.forEach(node => {
+                                var satisfiesAll = true;
+                                for (let i = 0; i < validIds.length; i++) {
+                                    let targetId = validIds[i];
+                                    let satisfiedThis = false;
+                                    if (node.id === targetId) {
+                                        satisfiedThis = true;
+                                    } else if (adjacency[node.id] && adjacency[node.id].has(targetId)) {
+                                        satisfiedThis = true;
+                                    }
+                                    if (!satisfiedThis) {
+                                        satisfiesAll = false;
+                                        break;
+                                    }
+                                }
+                                if (satisfiesAll) {
+                                    finalVisibleNodes.add(node.id);
+                                    // Add the full context of this intersected Record hub
+                                    if(adjacency[node.id]) {
+                                        adjacency[node.id].forEach(recordNeighbor => finalVisibleNodes.add(recordNeighbor));
+                                    }
+                                }
+                            });
+                            
+                            if (finalVisibleNodes.size === 0) {
+                                validIds.forEach(vid => finalVisibleNodes.add(vid));
+                            }
+                        }
+
+                        var nodesToHide = [];
+                        nodesDataSet.forEach(n => {
+                            if(!finalVisibleNodes.has(n.id)) nodesToHide.push(n.id);
+                        });
+
+                        var nodeUpdates = nodesToHide.map(id => ({id: id, hidden: true}));
+                        nodesDataSet.update(nodeUpdates);
+                        filterHiddenNodes = nodesToHide;
+                        
+                        network.unselectAll();
+                        network.fit({ nodes: Array.from(finalVisibleNodes), animation: { duration: 1000 } });
+                    } else {
+                        botDiv.innerHTML += "<br><br><span style='color:#e74c3c; font-size:12px;'>* 참고: 발견된 노드들이 현재 화면 영역 바깥에 존재하여 필터링은 생략되었습니다.</span>";
+                    }
+                }
+                
+                history.appendChild(botDiv);
+                history.scrollTop = history.scrollHeight;
+            })
+            .catch(err => { history.removeChild(typingDiv); alert("채팅 서버 연결 실패"); });
+        }
+    </script>
+</body>
+</html>
