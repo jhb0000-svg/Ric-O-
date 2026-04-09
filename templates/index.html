@@ -58,7 +58,7 @@
             </div>
         </div>
         <div class="search-container">
-            <!-- Emptied old search container -->
+            <button onclick="document.getElementById('helpPanel').style.right = '0';" style="background: #e74c3c; border: none; padding: 8px 15px; color: white; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); transition: background 0.2s;">❔ 아키텍처 도움말</button>
         </div>
     </div>
     
@@ -115,6 +115,7 @@
             <div id="chatHistory" style="flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;">
                 <div style="align-self: flex-start; background: #ffffff; padding: 12px 16px; border-radius: 12px; border: 1px solid #ddd; max-width: 85%; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); line-height: 1.4;">
                     안녕하세요! 아카이브 지식망 검색 봇입니다. 탭에서 원하시는 데이터셋을 선택 후 자연어로 질문해주세요.
+                    <div style="margin-top: 12px; padding: 10px 12px; background: #f1f8ff; border: 1px dashed #b8daff; border-radius: 8px; cursor: pointer; color: #0056b3; font-size: 13px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: background 0.2s;" onmouseover="this.style.background='#e2efff'" onmouseout="this.style.background='#f1f8ff'" onclick="document.getElementById('chatInput').value = this.innerText; sendChat();">전형배가 2008년 생산한 기록물을 찾아줘</div>
                 </div>
             </div>
             <div style="padding: 15px; background: #ffffff; border-top: 1px solid #ddd; display: flex; gap: 8px;">
@@ -501,5 +502,123 @@
             .catch(err => { history.removeChild(typingDiv); alert("채팅 서버 연결 실패"); });
         }
     </script>
+    <!-- Help Panel Overlay (PPT Style Slider) -->
+    <div id="helpPanel" style="position: fixed; top: 0; right: -600px; width: 550px; height: 100vh; background: #fdfdfd; box-shadow: -5px 0 20px rgba(0,0,0,0.2); z-index: 10000; transition: right 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); display: flex; flex-direction: column;">
+        
+        <div style="background: #2c3e50; color: white; padding: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+            <h3 style="margin: 0; display:flex; align-items:center; gap:8px;">💡 Graph-RAG 시스템 발표자료</h3>
+            <button onclick="document.getElementById('helpPanel').style.right = '-600px';" style="background: none; border: none; color: white; font-size: 28px; cursor: pointer; padding: 0; line-height: 1; transition: color 0.1s;" onmouseover="this.style.color='#e74c3c'" onmouseout="this.style.color='white'">&times;</button>
+        </div>
+
+        <div style="flex: 1; position: relative; overflow: hidden; background: #eaeff2;">
+            <!-- SLIDE 1 -->
+            <div id="slide-1" class="help-slide active-slide" style="position: absolute; top:0; left:0; width:100%; height:100%; padding: 30px; box-sizing: border-box; transition: transform 0.4s ease; background: white; overflow-y:auto; display:flex; flex-direction:column; gap:20px;">
+                <div style="background: #34495e; color: white; padding: 10px 15px; border-radius: 8px; font-weight: bold; font-size: 18px; text-align: center;">아키텍처 스택 & 인프라 구성</div>
+                
+                <!-- HTML-based Infra Diagram -->
+                <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; display:flex; flex-direction:column; gap: 15px; align-items:center;">
+                    <div style="background:#27ae60; color:white; padding:8px 20px; border-radius:8px; font-weight:bold; font-size:14px; box-shadow:0 2px 4px rgba(0,0,0,0.1);">🌐 Frontend (Vis.js / HTML5)</div>
+                    
+                    <div style="display:flex; gap: 50px; font-size: 20px; color:#bdc3c7;">
+                        <div>⬇️</div><div>⬆️</div>
+                    </div>
+                    
+                    <div style="background:#3498db; color:white; padding:10px 40px; border-radius:8px; font-weight:bold; font-size:15px; box-shadow:0 2px 4px rgba(0,0,0,0.1);">⚙️ Python FastAPI (Backend Web Server)</div>
+                    
+                    <div style="display:flex; gap: 80px; width:100%; justify-content:center;">
+                        <div style="text-align:center;">
+                            <div style="font-size:20px; color:#bdc3c7; margin-bottom:10px;">↙️ ↗️</div>
+                            <div style="background:#f39c12; color:white; padding:12px; border-radius:8px; font-weight:bold; font-size:13px; box-shadow:0 2px 4px rgba(0,0,0,0.1); width:130px;">🕸️ Neo4j<br>(Graph DBMS)</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="font-size:20px; color:#bdc3c7; margin-bottom:10px;">↘️ ↖️</div>
+                            <div style="background:#8e44ad; color:white; padding:12px; border-radius:8px; font-weight:bold; font-size:13px; box-shadow:0 2px 4px rgba(0,0,0,0.1); width:130px;">🧠 Local vLLM<br>(Gemma-4-26B)</div>
+                        </div>
+                    </div>
+                </div>
+
+                <p style="font-size: 14px; line-height: 1.7; color: #444; border-left: 4px solid #3498db; padding-left: 15px; margin-top:20px;">
+                    본 시스템은 <b>기록물(RecordResource)</b>을 중심으로 사람(Agent), 부서(Org), 단위과제(Task), 연도(Date)를 하나로 연결하는 거대한 <b>지식망 플랫폼</b>입니다.<br><br>
+                    단순 키워드 매칭을 넘어, 물리엔진(Force Atlas 2) 기반 그래프 렌더링과 대형 언어 모델(LLM) 추론을 결합하여 지능형 검색 경험을 제공합니다.
+                </p>
+            </div>
+
+            <!-- SLIDE 2 -->
+            <div id="slide-2" class="help-slide" style="position: absolute; top:0; left:0; width:100%; height:100%; padding: 30px; box-sizing: border-box; transition: transform 0.4s ease; background: white; overflow-y:auto; transform: translateX(100%);">
+                <div style="background: #e74c3c; color: white; padding: 10px 15px; border-radius: 8px; font-weight: bold; font-size: 18px; text-align: center; margin-bottom: 20px;">1. 대화형 지식 분석 (2-Step LLM Flow)</div>
+                <p style="font-size:13px; color:#666; margin-bottom:15px;">vLLM 파이프라인 업그레이드로 인해, 봇이 사전에 사용자의 복잡한 의도를 캐치합니다.</p>
+                
+                <div style="display:flex; flex-direction: column; gap: 8px; font-family: 'Segoe UI', sans-serif;">
+                    <div style="border: 2px solid #3498db; border-radius: 8px; padding: 12px; background: #ebf5fb; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                        <span style="font-weight:bold; color:#2980b9;">🙋‍♂️ 1단계: 유저 질의</span><br>
+                        <span style="font-size:13px; color:#555;">📝 "전형배가 올림픽 관련해서 생산한 기록물 있어?"</span>
+                    </div>
+                    <div style="text-align:center; color:#bdc3c7; font-size:20px;">⬇️</div>
+                    <div style="border: 2px solid #9b59b6; border-radius: 8px; padding: 12px; background: #f4ecf7; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                        <span style="font-weight:bold; color:#8e44ad;">🧠 2단계: 1차 vLLM (의도 파악/고유명사 추출)</span><br>
+                        <span style="font-size:13px; color:#555;">LLM이 문맥을 선행 분석하여 고유명사 전처리 수행<br>⚡ <b>추출 결과:</b> <code>["전형배", "올림픽"]</code></span>
+                    </div>
+                    <div style="text-align:center; color:#bdc3c7; font-size:20px;">⬇️</div>
+                    <div style="border: 2px solid #f39c12; border-radius: 8px; padding: 12px; background: #fef5e7; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                        <span style="font-weight:bold; color:#d35400;">🕸️ 3단계: Neo4j 그래프망 탐색</span><br>
+                        <span style="font-size:13px; color:#555;">추출된 키워드를 그래프 허브(안테나)에 대입하여 이웃 연관 노드(2-Hop 컨텍스트망) 싹쓸이 파싱</span>
+                    </div>
+                    <div style="text-align:center; color:#bdc3c7; font-size:20px;">⬇️</div>
+                    <div style="border: 2px solid #27ae60; border-radius: 8px; padding: 12px; background: #e9f7ef; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                        <span style="font-weight:bold; color:#27ae60;">💬 4단계: 2차 vLLM (RAG 융합 응답)</span><br>
+                        <span style="font-size:13px; color:#555;">수집된 그래프 데이터를 바탕으로 최종 자연어 문장 생성 및 프론트 시각화(Hard Filter) 반영</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SLIDE 3 -->
+            <div id="slide-3" class="help-slide" style="position: absolute; top:0; left:0; width:100%; height:100%; padding: 30px; box-sizing: border-box; transition: transform 0.4s ease; background: white; overflow-y:auto; transform: translateX(100%);">
+                <div style="background: #2980b9; color: white; padding: 10px 15px; border-radius: 8px; font-weight: bold; font-size: 18px; text-align: center; margin-bottom: 20px;">2. 다중 조건 물리 엔진 필터</div>
+                
+                <p style="font-size: 14px; line-height: 1.7; color:#444; background: #f8f9fa; padding: 20px; border-radius: 12px; border: 1px solid #eee; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);">
+                    상단 검색바를 통해 메타데이터를 정밀 타격하는 모드입니다.<br><br>
+                    <b style="color:#27ae60;">AND 로직 집중화:</b><br>다수의 키워드(예: "보건복지부", "2008년도")를 동시에 만족시키는 <b>교집합 기록물 중심 노드</b>를 판별합니다.<br><br>
+                    <b style="color:#e74c3c;">Physics Engine (Force Atlas 2):</b><br>교집합에 실패한 의미 없는 노드는 Canvas상에서 100% 투명해집니다. 살아남은 핵심 노드들만 점성이 발생해 화면 한가운데로 블랙홀처럼 뭉쳐지며 포도송이처럼 군집을 이룹니다.
+                </p>
+                
+                <div style="margin-top:20px; padding:15px; background:#fff3cd; border-left:4px solid #ffc107; font-size:13px; color:#856404;">
+                    💡 <b>Tip:</b> 시각화된 노드를 마우스로 드래그 앤 드롭 해보세요. 물리엔진의 탄성력을 바로 느낄 수 있습니다!
+                </div>
+            </div>
+        </div>
+
+        <!-- PPT Controller -->
+        <div style="height: 60px; background: #2c3e50; border-top: 1px solid #1a252f; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; box-shadow: 0 -2px 5px rgba(0,0,0,0.1);">
+            <button onclick="prevSlide()" style="background: #34495e; color: white; border: 1px solid #1a252f; padding: 8px 15px; border-radius: 4px; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#3e5368'" onmouseout="this.style.background='#34495e'">◀ 이전 (Prev)</button>
+            <div id="slide-dots" style="display:flex; gap: 10px;">
+                <div class="dot active-dot" style="width:12px; height:12px; border-radius:50%; background:white; cursor:pointer;" onclick="jumpToSlide(1)"></div>
+                <div class="dot" style="width:12px; height:12px; border-radius:50%; background:#7f8fa6; cursor:pointer;" onclick="jumpToSlide(2)"></div>
+                <div class="dot" style="width:12px; height:12px; border-radius:50%; background:#7f8fa6; cursor:pointer;" onclick="jumpToSlide(3)"></div>
+            </div>
+            <button onclick="nextSlide()" style="background: #34495e; color: white; border: 1px solid #1a252f; padding: 8px 15px; border-radius: 4px; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#3e5368'" onmouseout="this.style.background='#34495e'">다음 (Next) ▶</button>
+        </div>
+
+        <script>
+            let currentHelpSlide = 1;
+            const totalHelpSlides = 3;
+            function updateSlide() {
+                for(let i=1; i<=totalHelpSlides; i++) {
+                    const slide = document.getElementById('slide-'+i);
+                    if(i < currentHelpSlide) slide.style.transform = 'translateX(-100%)';
+                    else if(i === currentHelpSlide) slide.style.transform = 'translateX(0)';
+                    else slide.style.transform = 'translateX(100%)';
+                }
+                const dots = document.querySelectorAll('.dot');
+                dots.forEach((d, idx) => {
+                    d.style.background = (idx === currentHelpSlide - 1) ? 'white' : '#7f8fa6';
+                });
+            }
+            function prevSlide() { if(currentHelpSlide > 1) { currentHelpSlide--; updateSlide(); } }
+            function nextSlide() { if(currentHelpSlide < totalHelpSlides) { currentHelpSlide++; updateSlide(); } }
+            function jumpToSlide(num) { currentHelpSlide = num; updateSlide(); }
+            // init
+            setTimeout(updateSlide, 100);
+        </script>
+    </div>
 </body>
 </html>
