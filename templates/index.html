@@ -58,6 +58,10 @@
             </div>
         </div>
         <div class="search-container">
+            <div style="background:#34495e; border-radius:6px; display:flex; overflow:hidden; border:1px solid #2c3e50;">
+                <div id="btnGraphView" onclick="toggleView('graph')" style="padding:8px 15px; font-size:13px; font-weight:bold; cursor:pointer; background:#fdfdfd; color:#2c3e50;">🕸️ 그래프 뷰</div>
+                <div id="btnListView" onclick="toggleView('list')" style="padding:8px 15px; font-size:13px; font-weight:bold; cursor:pointer; background:#34495e; color:#a4b0be; transition:0.2s;" onmouseover="if(this.style.background!=='#fdfdfd')this.style.background='#3e5368'" onmouseout="if(this.style.background!=='#fdfdfd')this.style.background='#34495e'">📋 목록 뷰</div>
+            </div>
             <button onclick="document.getElementById('helpPanel').style.right = '0';" style="background: #e74c3c; border: none; padding: 8px 15px; color: white; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); transition: background 0.2s;">❔ 아키텍처 도움말</button>
         </div>
     </div>
@@ -93,6 +97,7 @@
         <div class="node-popup-subtitle" id="popupSubtitle">🎯 핵심 개념 (<span id="popupTypeEng">Entity</span>)</div>
         <div class="node-popup-content" id="popupContent">내용</div>
         <div class="node-popup-footer" id="popupFooter">ID: ENT_XXXX</div>
+        <button id="btnFetchRecords" onclick="openRecordsModal()" style="width:100%; margin-top:15px; padding:10px; background:#3498db; color:white; border:none; border-radius:6px; font-weight:bold; cursor:pointer; transition:0.2s;" onmouseover="this.style.background='#2980b9'" onmouseout="this.style.background='#3498db'">📋 관련 기록물 조회하기</button>
     </div>
 
     <div style="display: flex; flex-direction: row; flex: 1; min-height: 0;">
@@ -104,6 +109,24 @@
             </div>
             
             <div id="network" style="flex: 1; min-height: 0; background: #ffffff;"></div>
+            
+            <div id="listView" style="flex: 1; min-height: 0; background: #fdfdfd; display: none; padding: 30px; overflow-y: auto;">
+                <div style="background:white; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.05); padding:20px; border:1px solid #eee;">
+                    <h3 style="margin-top:0; color:#2c3e50; border-bottom:2px solid #3498db; padding-bottom:10px; display:inline-block;">📋 검색된 기록물 목록</h3>
+                    <table style="width:100%; border-collapse:collapse; font-size:14px; text-align:left; margin-top:10px;">
+                        <thead>
+                            <tr style="border-bottom:2px solid #2c3e50; background:#f8f9fa;">
+                                <th style="padding:12px; color:#2c3e50; width:20%;">고유 ID</th>
+                                <th style="padding:12px; color:#2c3e50;">기록물 제목</th>
+                                <th style="padding:12px; color:#2c3e50; text-align:center; width:15%;">원문 보기</th>
+                            </tr>
+                        </thead>
+                        <tbody id="listViewTbody">
+                            <tr><td colspan="3" style="text-align:center; padding:30px; color:#7f8fa6;">좌측 필터를 적용하거나 챗봇에 질의하면 목록이 갱신됩니다.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
             
         </div>
 
@@ -198,7 +221,7 @@
                         counts.nodes[n.label] = (counts.nodes[n.label] || 0) + 1;
                         
                         return { 
-                            id: n.id, label: shortTitle + "\n(" + koLabel + ")", title: "💡 " + fullTitle, originalTitle: fullTitle, nodeType: n.label, nodeKoType: koLabel,
+                            id: n.id, recordId: n.recordId || null, label: shortTitle + "\n(" + koLabel + ")", title: "💡 " + fullTitle, originalTitle: fullTitle, nodeType: n.label, nodeKoType: koLabel,
                             color: { background: color, border: 'rgba(255,255,255,0.8)', highlight: { background: color, border: '#ffeaa7' } }, shape: 'circle', margin: 10, widthConstraint: { minimum: 75, maximum: 75 }, font: { size: 12, color: '#ffffff', face: 'arial', bold: true } 
                         };
                     });
@@ -224,7 +247,13 @@
                         nodesDataSet = new vis.DataSet(parsedNodes);
                         edgesDataSet = new vis.DataSet(parsedEdges);
                         network = new vis.Network(container, {nodes: nodesDataSet, edges: edgesDataSet}, options);
-                        network.on("click", function (params) { if (params.nodes.length > 0) openPopup(params.nodes[0]); else closePopup(); });
+                        
+                        network.on("click", function (params) { 
+                            if (params.nodes.length > 0) openPopup(params.nodes[0]); 
+                            else closePopup(); 
+                        });
+                        
+                        updateListView(); // Initialize list view with all nodes
                     } else {
                         nodesDataSet.clear();
                         edgesDataSet.clear();
@@ -349,6 +378,8 @@
             
             network.unselectAll();
             network.fit({ nodes: Array.from(finalVisibleNodes), animation: { duration: 1000 } });
+            
+            updateListView(finalVisibleNodes);
         }
 
         function resetHardFilter(visualUpdate = true) {
@@ -365,6 +396,7 @@
                 document.getElementById('flt_act').value = "";
                 network.unselectAll();
                 network.fit({ animation: { duration: 1000 } });
+                updateListView();
             }
         }
 
@@ -491,9 +523,13 @@
                         
                         network.unselectAll();
                         network.fit({ nodes: Array.from(finalVisibleNodes), animation: { duration: 1000 } });
+                        updateListView(finalVisibleNodes);
                     } else {
                         botDiv.innerHTML += "<br><br><span style='color:#e74c3c; font-size:12px;'>* 참고: 발견된 노드들이 현재 화면 영역 바깥에 존재하여 필터링은 생략되었습니다.</span>";
+                        updateListView();
                     }
+                } else {
+                    updateListView();
                 }
                 
                 history.appendChild(botDiv);
@@ -620,5 +656,197 @@
             setTimeout(updateSlide, 100);
         </script>
     </div>
+
+    <!-- Related Records Modal -->
+    <div id="recordsModalOverlay" style="display:none; position:fixed; top:0;left:0;width:100%;height:100%; background:rgba(0,0,0,0.5); z-index:10001; align-items:center; justify-content:center;">
+        <div style="background:white; width: 600px; max-height:80vh; border-radius:12px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 10px 25px rgba(0,0,0,0.3);">
+            <div style="padding:15px 20px; background:#e74c3c; color:white; display:flex; justify-content:space-between; align-items:center;">
+                <h3 id="recordsModalTitle" style="margin:0; font-size:16px;">관련 기록물 목록</h3>
+                <span style="font-size:24px; cursor:pointer;" onclick="document.getElementById('recordsModalOverlay').style.display='none'">&times;</span>
+            </div>
+            <div id="recordsModalList" style="padding:10px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:5px; background:#f4f6f8;">
+            </div>
+        </div>
+    </div>
+
+    <!-- Document Full-text Viewer Modal -->
+    <div id="docViewerOverlay" style="display:none; position:fixed; top:0;left:0;width:100%;height:100%; background:rgba(0,0,0,0.75); z-index:10005; align-items:center; justify-content:center;">
+        <div style="background:white; width: 800px; height:85vh; border-radius:12px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,0.5);">
+            <div style="padding:15px 20px; background:#34495e; color:white; display:flex; justify-content:space-between; align-items:center;">
+                <h3 id="docViewerTitle" style="margin:0; font-size:18px;">원문 뷰어</h3>
+                <span style="font-size:24px; cursor:pointer; color:#ecf0f1; transition:color 0.2s;" onmouseover="this.style.color='#e74c3c'" onmouseout="this.style.color='#ecf0f1'" onclick="document.getElementById('docViewerOverlay').style.display='none'">&times;</span>
+            </div>
+            <div style="background:#f8f9fa; padding:10px 20px; border-bottom:1px solid #ddd; color:#7f8fa6; font-size:13px; font-family:monospace;" id="docViewerMeta"></div>
+            <div id="docViewerContent" style="padding:30px 40px; overflow-y:auto; flex:1; font-size:15px; line-height:1.8; color:#2c3e50; white-space:pre-wrap; font-family:'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isListView = false;
+        
+        function toggleView(mode) {
+            const btnGraph = document.getElementById('btnGraphView');
+            const btnList = document.getElementById('btnListView');
+            const netDiv = document.getElementById('network');
+            const listDiv = document.getElementById('listView');
+            const legendDiv = document.getElementById('legendArea');
+            
+            if (mode === 'list') {
+                isListView = true;
+                btnList.style.background = '#fdfdfd';
+                btnList.style.color = '#2c3e50';
+                btnGraph.style.background = '#34495e';
+                btnGraph.style.color = '#a4b0be';
+                netDiv.style.display = 'none';
+                legendDiv.style.display = 'none';
+                listDiv.style.display = 'block';
+            } else {
+                isListView = false;
+                btnGraph.style.background = '#fdfdfd';
+                btnGraph.style.color = '#2c3e50';
+                btnList.style.background = '#34495e';
+                btnList.style.color = '#a4b0be';
+                listDiv.style.display = 'none';
+                netDiv.style.display = 'block';
+                legendDiv.style.display = 'block';
+                if(network) network.fit();
+            }
+        }
+
+        // Called initially and by applyAdvancedFilter/sendChat
+        function updateListView(visibleNodesSet) {
+            if(!nodesDataSet) return;
+            const tbody = document.getElementById('listViewTbody');
+            tbody.innerHTML = '';
+            
+            let count = 0;
+            nodesDataSet.forEach(n => {
+                if(n.nodeType === 'RecordResource') {
+                    if(!visibleNodesSet || visibleNodesSet.has(n.id)) {
+                        count++;
+                        let tr = document.createElement('tr');
+                        tr.style.background = count % 2 === 0 ? '#fafafa' : '#ffffff';
+                        tr.style.borderBottom = '1px solid #eee';
+                        let docId = n.recordId || n.id;
+                        tr.innerHTML = `
+                            <td style="padding:10px 12px; color:#7f8fa6; font-family:monospace; font-size:13px;">${docId}</td>
+                            <td style="padding:10px 12px; font-weight:bold; color:#2980b9;">${n.originalTitle || n.label}</td>
+                            <td style="padding:10px 12px; text-align:center;">
+                                <button onclick="openDocViewer('${docId}', '${(n.originalTitle || n.label).replace(/'/g,"\\'").trim()}')" style="background:#27ae60; color:white; border:none; padding:5px 12px; border-radius:4px; cursor:pointer; font-size:12px; font-weight:bold;">원문보기</button>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    }
+                }
+            });
+            
+            if(count === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:30px; color:#e74c3c; font-weight:bold;">조건에 일치하는 기록물이 없습니다.</td></tr>';
+            }
+        }
+
+        let lastClickedNodeId = null;
+        function openPopup(nodeId) {
+            var node = nodesDataSet.get(nodeId);
+            if(!node) return;
+            lastClickedNodeId = nodeId;
+            
+            document.getElementById("popupTitle").innerText = node.originalTitle || node.label;
+            document.getElementById("popupTypeEng").innerText = node.nodeType;
+            document.getElementById("popupFooter").innerText = "ID: " + node.id;
+            
+            var btnFetch = document.getElementById("btnFetchRecords");
+            if (node.nodeType === "RecordResource") {
+                btnFetch.innerHTML = "📝 바로 원문 조회하기";
+                btnFetch.onclick = () => openDocViewer(node.recordId || node.id, node.originalTitle || node.label);
+            } else {
+                btnFetch.innerHTML = "📋 관련 기록물 조회하기";
+                btnFetch.onclick = () => openRecordsModal();
+            }
+
+            var desc = "<b>" + node.nodeKoType + "</b> 엔티티입니다.<br><br>";
+            if (currentTab === 'record') {
+                if(node.nodeType === "RecordResource") desc += "배후 메타데이터 관리가 적용된 아카이브 <b>기록물</b> 객체입니다.";
+                else if(node.nodeType === "Agent") desc += "비즈니스를 수행한 <b>담당자(행위자)</b> 노드입니다.";
+                else if(node.nodeType === "Activity") desc += "문서가 탄생하게 된 근본적인 <b>비즈니스 업무</b>입니다.";
+                else if(node.nodeType === "Mandate") desc += "규제/집행 근거가 되는 <b>법령</b>입니다.";
+                else desc += "연결망 알고리즘이 분석한 공통 속성 노드입니다.";
+            } else {
+                desc += "고級 RAG 검색에서 참조하는 연결망 엔티티 구조입니다.";
+            }
+            
+            document.getElementById("popupContent").innerHTML = desc;
+            document.getElementById("nodePopup").style.display = "block";
+        }
+
+        function openRecordsModal() {
+            if(!lastClickedNodeId || !nodesDataSet || !edgesDataSet) return;
+            
+            // Find edges connected to the lastClickedNodeId
+            let connectedRecords = [];
+            let rootNode = nodesDataSet.get(lastClickedNodeId);
+            
+            edgesDataSet.forEach(e => {
+                let friendId = null;
+                if(e.from === lastClickedNodeId) friendId = e.to;
+                if(e.to === lastClickedNodeId) friendId = e.from;
+                
+                if(friendId) {
+                    let friendNode = nodesDataSet.get(friendId);
+                    if(friendNode && friendNode.nodeType === 'RecordResource') {
+                        connectedRecords.push(friendNode);
+                    }
+                }
+            });
+            
+            const listDiv = document.getElementById('recordsModalList');
+            listDiv.innerHTML = '';
+            
+            document.getElementById('recordsModalTitle').innerText = `[${rootNode.originalTitle}] 관련 기록물 (${connectedRecords.length}건)`;
+            
+            if(connectedRecords.length === 0) {
+                listDiv.innerHTML = '<div style="padding:30px; text-align:center; color:#7f8fa6;">관련된 기록물 노드가 인접해있지 않습니다.</div>';
+            } else {
+                connectedRecords.forEach(r => {
+                    let div = document.createElement('div');
+                    div.style.cssText = "background:white; padding:12px; border-radius:6px; border:1px solid #ddd; cursor:pointer; display:flex; justify-content:space-between; align-items:center; transition:background 0.2s;";
+                    div.onmouseover = () => div.style.background = '#f1f8ff';
+                    div.onmouseout = () => div.style.background = 'white';
+                    let rDocId = r.recordId || r.id;
+                    div.innerHTML = `
+                        <div style="flex:1;">
+                            <div style="font-size:12px; color:#e67e22; font-weight:bold; margin-bottom:4px;">${rDocId}</div>
+                            <div style="font-size:14px; font-weight:bold; color:#2c3e50;">${r.originalTitle || r.label}</div>
+                        </div>
+                        <button style="background:#e74c3c; color:white; border:none; padding:5px 12px; border-radius:4px; font-size:12px; cursor:pointer;" onclick="openDocViewer('${rDocId}', '${(r.originalTitle || r.label).replace(/'/g,"\\'").trim()}')">원문보기</button>
+                    `;
+                    listDiv.appendChild(div);
+                });
+            }
+            
+            document.getElementById('recordsModalOverlay').style.display = 'flex';
+        }
+
+        function openDocViewer(docId, title) {
+            document.getElementById('docViewerTitle').innerText = title;
+            document.getElementById('docViewerMeta').innerText = `Document ID: ${docId} | 요청 중...`;
+            document.getElementById('docViewerContent').innerHTML = `<div style="text-align:center; padding:50px; color:#7f8fa6;">Loading full-text data...</div>`;
+            document.getElementById('docViewerOverlay').style.display = 'flex';
+            
+            fetch(`/api/document/${docId}`)
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('docViewerMeta').innerText = `Document ID: ${data.id} | 상태: 200 OK`;
+                // Add simple text highlight or basic formatting
+                let text = data.content;
+                document.getElementById('docViewerContent').innerText = text; // text-based to avoid injection
+            })
+            .catch(err => {
+                document.getElementById('docViewerMeta').innerText = `Error: 서버 접속 실패`;
+                document.getElementById('docViewerContent').innerText = "원문을 불러오지 못했습니다.";
+            });
+        }
+    </script>
 </body>
 </html>

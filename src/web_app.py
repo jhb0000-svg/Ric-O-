@@ -40,9 +40,9 @@ async def get_graph(type: str = "record"):
         MATCH (n)-[r]->(m) 
         WHERE labels(n)[0] IN {labels_filter} 
           AND labels(m)[0] IN {labels_filter}
-        RETURN id(n) as source_id, labels(n)[0] as source_label, coalesce(n.name, n.id) as source_name, 
+        RETURN id(n) as source_id, n.id as source_real_id, labels(n)[0] as source_label, coalesce(n.name, n.id) as source_name, 
                type(r) as rel_type, 
-               id(m) as target_id, labels(m)[0] as target_label, coalesce(m.name, m.id) as target_name 
+               id(m) as target_id, m.id as target_real_id, labels(m)[0] as target_label, coalesce(m.name, m.id) as target_name 
         LIMIT 2000
         """
         results = client.execute_query(query)
@@ -53,8 +53,8 @@ async def get_graph(type: str = "record"):
         for row in results:
             src_id = row['source_id']
             tgt_id = row['target_id']
-            nodes_dict[src_id] = {"id": src_id, "label": row['source_label'], "title": row['source_name'] or str(src_id)}
-            nodes_dict[tgt_id] = {"id": tgt_id, "label": row['target_label'], "title": row['target_name'] or str(tgt_id)}
+            nodes_dict[src_id] = {"id": src_id, "recordId": row['source_real_id'], "label": row['source_label'], "title": row['source_name'] or str(src_id)}
+            nodes_dict[tgt_id] = {"id": tgt_id, "recordId": row['target_real_id'], "label": row['target_label'], "title": row['target_name'] or str(tgt_id)}
             edges.append({"from": src_id, "to": tgt_id, "label": row['rel_type']})
             
         return {
@@ -175,3 +175,14 @@ async def process_chat(req: ChatRequest):
         if client: client.close()
         return {"answer": f"검색 중 오류가 발생했습니다: {str(e)}", "focus_nodes": []}
 
+import os
+
+@app.get("/api/document/{doc_id}")
+async def get_document(doc_id: str):
+    file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sample_records", f"document_{doc_id}.txt")
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return {"id": doc_id, "content": content}
+    else:
+        return {"id": doc_id, "content": "⚠️ 연결된 원문 파일 리소스를 찾을 수 없습니다."}

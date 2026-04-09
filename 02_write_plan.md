@@ -1,38 +1,36 @@
-# 🚀 Phase 1 & 2: PRD and Implementation Plan
+# 📝 Phase 9: Task Plan (기록물 목록 뷰 및 원문 조회 기능)
 
-**Project:** 멀티 탭 그래프 뷰 전환 (RiC-O 기록물 vs 통합 지식베이스)
-**Goal:** 상단 탭 메뉴를 통해 '기록물 검색'과 '지식검색(법, 지침, 연구자료 등)' 두 가지 완전히 다른 스키마의 지식 그래프를 하나의 웹 서비스에서 토글(Toggle)하여 볼 수 있도록 통합합니다.
-
----
-
-## 📌 1. PRD (Product Requirements Document)
-### Overview
-현재 단일 뷰로 고정된 `index.html` 프론트엔드에 **[기록물 검색]** 및 **[지식 검색]** 탭 내비게이션을 신설합니다. 사용자가 탭을 전환하면 기존 Neo4j DB 안에 혼재되어 저장된 레거시 데이터(Law, Document, Chunk 등)와 신규 아카이브 데이터(RecordResource, Agent 등)를 명확히 분리하여 렌더링합니다.
-
-### Requirements
-- **메뉴 탭 UI 추가**: 최상단 헤더 중앙 혹은 좌측에 직관적인 탭(버튼) UI를 신설.
-- **백엔드 라우팅 분기**: `/api/graph` 에 `type` 파라미터를 추가하여 쿼리 레이블 필터링을 분기 처리.
-  - `?type=record`: `[RecordResource, Agent, Activity, ...]`
-  - `?type=knowledge`: `[Document, Chunk, Entity, Law, Article, ...]`
-- **동적 범례(Legend) 및 색상 변환**: 탭 전환 시 조회되는 노드 종류가 완전히 달라지므로, **좌측의 팝업 범례 창과 색상 매핑을 모듈화**하여 탭에 맞춰 실시간으로 교체(Re-mount)해야 합니다.
+**Goal:** 그래프 DB의 맥락 검색 엔진을 활용하면서도, 실시간으로 레코드를 표(Table) 형태로 조회하고 원문 텍스트(.txt)까지 읽을 수 있는 파이프라인 개발.
 
 ---
 
-## 📝 2. Task Breakdown (작업 계획)
+## 📅 Task List
 
-### [ ] Task 1: 백엔드 API 쿼리 다중화 (`src/web_app.py`)
-- `/api/graph` 라우트를 수정하여 쿼리 파라미터 `type`을 받습니다.
-- `type == 'knowledge'` 일 경우 `MATCH (n) WHERE labels(n)[0] IN ['Document', 'Chunk', 'Entity', 'Law', 'Article', 'Department', 'Judgment']` 로 변경된 전용 Cypher 쿼리를 실행하여 반환하도록 로직을 추가합니다.
+### [ ] Task 1: 백엔드 - 원문 데이터 연람 API 구축 (`src/web_app.py`)
+- FastAPI에 `@app.get("/api/document/{doc_id}")` 엔드포인트를 추가합니다.
+- 서버 로컬의 `sample_records/` 폴더를 탐색하여 전달받은 `doc_id`와 매칭되는 `document_{doc_id}.txt` 파일을 읽어 반환합니다.
+- 파일이 없을 경우를 대비한 404/안전 예외 처리 로직(Fallback)을 작성합니다.
 
-### [ ] Task 2: 상단 탭 메뉴 CSS 및 HTML 생성 (`templates/index.html`)
-- 헤더 영역에 `<div id="tabs">` 컴포넌트를 만들고 활성화(Active) 애니메이션 효과를 부여합니다.
+### [ ] Task 2: 프론트엔드 - 뷰 모드 토글 UI (`templates/index.html`)
+- 화면 우상단(도움말 버튼 옆)에 [그래프 뷰 🕸️] / [목록 뷰 📋] 전환 버튼을 추가합니다.
+- 토글 시 기존 `#network` 캔버스를 숨기고 `#listView`를 표시(혹은 그 반대)하는 JS 로직을 연동합니다.
 
-### [ ] Task 3: 프론트엔드 동적 렌더링 함수 구현 (`templates/index.html`)
-- `loadGraph(type)` 함수를 만듭니다. 
-- 이 안에서 API를 `fetch`하고, 가져온 데이터가 지식용인지 기록물용인지에 따라:
-  - 노드의 색상 분기 로직 재정의 (`Entity`는 파란색, `Law`는 빨간색 등).
-  - 범례(Legend Panel)의 HTML 텍스트를 대상 종류에 맞게 통째로 바꿔치기합니다.
-- Timeline 슬라이더 UI는 '기록물 검색' 탭에서만 보이도록 시각적으로 제어합니다(지식베이스 탭에서는 불필요할 수 있으므로).
+### [ ] Task 3: 프론트엔드 - 검색 결과의 렌더링 (목록 뷰)
+- 기존 `searchData()`에서 그래프에 던지는 데이터를 재활용합니다.
+- `RecordResource` 타입의 노드들만 추출하여, HTML 데이타 그리드 테이블(`<table>`)로 렌더링합니다.
+- 테이블의 제목 열 클릭 시 **Task 6(원문 뷰어)**을 띄우는 이벤트를 바인딩합니다.
+
+### [ ] Task 4: 프론트엔드 - 그래프 노드 클릭 팝업 이벤트
+- Vis.js의 `network.on("click")` 이벤트를 가로챕니다.
+- 노드 클릭 시 화면에 작은 스마트 팝업(Floating Label)을 띄우고, **[기록물 조회하기]** 버튼을 노출합니다.
+
+### [ ] Task 5: 프론트엔드 - 관련 기록물 모달(Modal) 뷰
+- Task 4에서 [기록물 조회하기]를 누르면, 현재 클릭된 대상(예: OLYMPIC, 혹은 정은경)과 **연결선(Edge)이 존재하는 기록물 노드들만 필터링**하여 깔끔한 모달 창 목록에 출력합니다.
+
+### [ ] Task 6: 프론트엔드 - 원문 텍스트 뷰어 (Full-Text Viewer)
+- 목록 뷰나 연관 기록물 모달 창에서 기록물 제목을 클릭하면, **전체화면 오버레이 뷰어**를 띄웁니다.
+- Javascript `fetch()`를 이용해 `/api/document/...` (Task 1 백엔드)를 비동기 호출합니다.
+- 가져온 오리지널 파일의 텍스트와 노드의 메타데이터를 통합하여 예쁘게 문서 뷰어 서식으로 렌더링합니다.
 
 ---
-**Status:** ⏳ Waiting for your approval. (단일 DB에서 두 마리 토끼를 잡는 이 계획에 동의하시면 '승인' 또는 '진행해' 라고 말씀해 주세요!)
+**Status:** ⏳ Waiting for Approval (이 작업 계획서의 방향성이 완벽해 보인다면 "승인"해주십시오! 즉시 Red-Green-Refactor 방식의 코딩(TDD 방식)에 진입하겠습니다!)
