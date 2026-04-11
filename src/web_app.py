@@ -19,12 +19,12 @@ def get_db():
         return None
 
 @app.get("/", response_class=HTMLResponse)
-async def get_index():
+def get_index():
     with open(os.path.join(os.path.dirname(__file__), "..", "templates", "index.html"), "r") as f:
         return f.read()
 
 @app.get("/api/graph")
-async def get_graph(type: str = "record"):
+def get_graph(type: str = "record"):
     client = get_db()
     
     if not client:
@@ -72,7 +72,7 @@ class ChatRequest(BaseModel):
     type: str = "record"
 
 @app.post("/api/chat")
-async def process_chat(req: ChatRequest):
+def process_chat(req: ChatRequest):
     client = get_db()
     if not client:
         return {"answer": "데이터베이스 연결에 실패했습니다.", "focus_nodes": []}
@@ -80,33 +80,45 @@ async def process_chat(req: ChatRequest):
     import urllib.request
     import json
     
-    def call_vllm_completion(prompt_str, max_tok=512, temp=0.1, stop=None):
-        if stop is None: stop = ["<end_of_turn>", "<start_of_turn>", "[데이터베이스", "[사용자"]
+    def call_vllm_completion(system_str, user_str, max_tok=512, temp=0.1):
         req_data = {
-            "model": "google/gemma-4-26b-a4b",
-            "prompt": prompt_str,
+            "model": "google/gemma-4-26B-A4B-it",
+            "messages": [
+                {"role": "system", "content": system_str},
+                {"role": "user", "content": user_str}
+            ],
             "max_tokens": max_tok,
             "temperature": temp,
-            "stop": stop
         }
         try:
             req_json = json.dumps(req_data).encode("utf-8")
-            req_url = urllib.request.Request("http://localhost:8000/v1/completions", data=req_json, headers={'Content-Type': 'application/json'})
-            with urllib.request.urlopen(req_url, timeout=30) as response:
+            req_url = urllib.request.Request("http://localhost:8000/v1/chat/completions", data=req_json, headers={'Content-Type': 'application/json'})
+            with urllib.request.urlopen(req_url, timeout=60) as response:
                 llm_res = json.loads(response.read().decode("utf-8"))
-                return llm_res['choices'][0]['text'].strip()
+                text = llm_res['choices'][0]['message']['content'].strip()
+                # 모델 내부 사고(thought) 첫 줄 제거
+                lines = text.splitlines()
+                if lines and lines[0].strip().lower() == "thought":
+                    text = "\n".join(lines[1:]).strip()
+                return text
         except Exception as e:
             return None
 
     query_text = req.query
     
     # 1. LLM Keyword Extraction
-    extract_prompt = f"<start_of_turn>user\n다음 문장에서 기록물 검색을 위한 핵심 고유명사 키워드(사람, 기관, 연도, 단위과제 등)만 쉼표로 구분하여 추출하세요. 문장 형식을 비우고 오직 핵심 명사만 출력하세요.\n\n문장: {query_text}<end_of_turn>\n<start_of_turn>model\n추출된 키워드:"
-    llm_extracted = call_vllm_completion(extract_prompt, max_tok=50)
+    llm_extracted = call_vllm_completion(
+        "당신은 기록물 검색 키워드 추출 도구입니다. 사용자 문장에서 검색에 필요한 핵심 고유명사(사람 이름, 기관명, 연도, 단위과제명 등)만 쉼표로 구분하여 출력하세요. 설명 없이 키워드만 출력하세요.",
+        query_text,
+        max_tok=50, temp=0.1
+    )
     
     keywords = []
     if llm_extracted:
-        keywords = [k.strip() for k in llm_extracted.split(",") if len(k.strip()) > 1]
+        # 모델이 "thought\n키워드" 형태로 응답하는 경우 마지막 줄만 사용
+        lines = [l.strip() for l in llm_extracted.splitlines() if l.strip()]
+        keyword_line = lines[-1] if lines else ""
+        keywords = [k.strip() for k in keyword_line.split(",") if len(k.strip()) > 1]
     
     # Fallback to Regex
     if not keywords:
@@ -126,7 +138,9 @@ async def process_chat(req: ChatRequest):
         if keywords:
             matched_node_groups = []
             for k in keywords:
-                q = f"MATCH (n) WHERE labels(n)[0] IN {labels_filter} AND coalesce(n.name, n.id) CONTAINS '{k}' RETURN id(n) as nid"
+                # 연도 키워드 정규화: "2008년" → "2008"
+                k_normalized = k.rstrip('년') if k.rstrip('년').isdigit() else k
+                q = f"MATCH (n) WHERE labels(n)[0] IN {labels_filter} AND coalesce(n.name, n.id) CONTAINS '{k_normalized}' RETURN id(n) as nid"
                 res = client.execute_query(q)
                 nids = [r['nid'] for r in res]
                 if nids:
@@ -158,10 +172,15 @@ async def process_chat(req: ChatRequest):
             
         client.close()
         
-        # 2. LLM RAG Response Generation
-        prompt = f"<start_of_turn>user\n당신은 아카이브 지식망 AI 어시스턴트입니다. 주어진 데이터베이스 관계 통계를 바탕으로 사용자의 질문에 한국어로 깔끔하고 전문적으로 답변하세요. 질문과 답변 형식을 반복해서 출력하지 말고 순수하게 답변만 작성하십시오.\n데이터 정보가 부족하면 모른다고 하십시오.\n\n[데이터베이스 관계 통계]\n{context_str}\n\n사용자 질문: {query_text}<end_of_turn>\n<start_of_turn>model\n"
+        if not context_str:
+            answer = "검색 조건에 일치하는 기록물이나 연관 지식망 데이터를 찾을 수 없습니다. 키워드를 조정하여 다시 질문해 주세요.<br><br><span style='color:#7f8fa6; font-size:11px;'>🤖 Powered by Local vLLM (Gemma-4-26B / Completions) Graph-RAG</span>"
+            return {"answer": answer, "focus_nodes": []}
         
-        llm_answer = call_vllm_completion(prompt)
+        # 2. LLM RAG Response Generation
+        llm_answer = call_vllm_completion(
+            f"당신은 아카이브 지식망 AI 어시스턴트입니다. 오직 아래 제공된 [데이터베이스 관계 통계] 데이터에 나타난 내용만을 기반으로 답변하십시오. 창작이나 일반 상식을 동원하지 마십시오.\n\n[데이터베이스 관계 통계]\n{context_str}",
+            query_text
+        )
         
         if not llm_answer:
             llm_answer = "⚠️ 로컬 vLLM (Gemma) 연결에 실패했거나 응답이 없습니다."
@@ -169,7 +188,7 @@ async def process_chat(req: ChatRequest):
         formatted_answer = llm_answer.replace("\n", "<br>")
         answer = f"{formatted_answer}<br><br><span style='color:#7f8fa6; font-size:11px;'>🤖 Powered by Local vLLM (Gemma-4-26B / Completions) Graph-RAG</span>"
             
-        return {"answer": answer, "focus_nodes": frontend_focus_nodes}
+        return {"answer": answer, "focus_nodes": llm_focus_nodes}
         
     except Exception as e:
         if client: client.close()
@@ -178,7 +197,7 @@ async def process_chat(req: ChatRequest):
 import os
 
 @app.get("/api/document/{doc_id}")
-async def get_document(doc_id: str):
+def get_document(doc_id: str):
     file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sample_records", f"document_{doc_id}.txt")
     if os.path.exists(file_path):
         with open(file_path, "r", encoding="utf-8") as f:
