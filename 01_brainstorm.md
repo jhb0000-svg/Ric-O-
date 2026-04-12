@@ -1,31 +1,50 @@
-# 🚀 Phase 9: Record List View & Full-Text Read Pipeline
+# Product Requirements Document (PRD) - 8006 Service Hang Fix
 
-**Project:** 보유 기록물 목록 뷰 전환 및 원문 데이터(Full-Text) 연람 기능 추가
-**Goal:** 기존 그래프 전용 탐색 뷰에 "목록형 검색 뷰"를 추가하고, 그래프상에서 직관적으로 노드를 클릭하여 관련된 실제 원문 텍스트 데이터까지 깊게 파고들 수 있는 사용자 경험(UX)을 구축합니다.
+## 1. Context & Problem Statement
+The user reported that the service running on port 8006 (`RiC-O Graph Viewer` running via FastAPI/Uvicorn) is behaving strangely and freezing.
+Upon investigation, the server process was stuck and unresposive to any HTTP requests (including `curl`). 
 
----
+**Root Cause:**
+FastAPI routes (`get_index`, `get_graph`, `process_chat`, `get_document`) are declared as `async def`. However, inside these endpoints, standard synchronous blocking operations are heavily utilized:
+1. File I/O (`open().read()`)
+2. Synchronous Database queries (`Neo4jClient.execute_query` using the standard blocking Neo4j driver)
+3. Synchronous HTTP requests (`urllib.request.urlopen` to the vLLM server with a 60-second timeout)
 
-## 📌 1. PRD (Product Requirements Document)
+In FastAPI, functions declared with `async def` are run directly on the main event loop. If they block, the entire server process is blocked from handling incoming concurrent requests. A slow vLLM inference or Neo4j query will deadlock the event loop entirely.
 
-### 요구사항 분석
-1. **목록형 뷰 전환 기능**:
-   - 상단 네비게이션 헤더 근처에 [그래프 뷰] / [목록 뷰] 전환 토글 버튼 메뉴 생성.
-   - 기존의 "상단 다중 조건 검색 바"를 공유하여, 검색 조건은 동일하게 유지.
-   - 목록 뷰 활성화 시, Vis.js 캔버스를 숨기고 세련된 데이터 테이블(Data Table) 형태로 검색된 기록물 목록을 출력.
+## 2. Proposed Technical Approaches
 
-2. **그래프 팝업 & 연관 기록물 전개**:
-   - 그래프(Vis.js) 뷰에서 특정 노드(예: '전형배', '2008년도')를 클릭했을 때, 커스텀 **스마트 팝업** 띄움.
-   - 팝업 내 최하단 정중앙에 **[기록물 조회하기]** 버튼 배치.
-   - 이 버튼을 누르면, 해당 노드와 연관된 기록물들의 목록이 모달 창으로 짜잔 하고 나타남.
+### Approach 1: Convert `async def` to `def` (Recommended)
+FastAPI is designed such that if an endpoint is declared with `def` rather than `async def`, it will automatically execute the function in an isolated background thread pool (using `starlette.concurrency.run_in_threadpool`). 
+* **Pros:** Simplest and safest fix. Requires minimal code changes (just removing `async` from the route definitions). Avoids the need for new dependencies.
+* **Cons:** Less parallel concurrency compared to true async programming, but perfectly acceptable for this workload.
 
-3. **기록물 상세 조회 (원문 파일 열람)**:
-   - 목록 뷰(또는 모달 창)에서 기록물 '제목'을 클릭하면, **해당 기록물의 상세 속성 정보**와 함께 **실제 원문 텍스트(Full-Text)**를 읽을 수 있는 뷰어 팝업이 뜸.
-   - 백엔드에 `/api/document/{record_id}` API 구멍을 뚫어서 `sample_records/` 폴더 내에 위치한 `document_*.txt` 파일을 읽어와 프론트로 전송.
+### Approach 2: Migrate to Pure Asynchronous Libraries
+Refactor all blocking calls to use truly asynchronous equivalents:
+* Replace `urllib.request` with `httpx.AsyncClient`.
+* Replace standard Neo4j driver connection with `neo4j.AsyncGraphDatabase`.
+* Replace standard `open` with `aiofiles`.
+* **Pros:** Best performance under high load.
+* **Cons:** Requires adding new dependencies (`httpx`, `aiofiles`) and extensive code refactoring, which introduces higher risk.
 
-### ❓ Clarifying Question (핵심 로직 확인)
-**기록물 ID와 파일 매칭 방식**에 대한 동의/확인 사항입니다.
-현재 그래프 DB 상 기록물의 속성이나 ID값과, 물리적 서버 안의 `sample_records/document_*.txt` 파일 간의 매핑을 수행해야 합니다.
-예컨대, 검색으로 조회된 기록물의 고유 ID나 문서번호(예: OLYMPIC-001)가 화면에 있을 텐데, 서버에서 `document_[ID].txt` 파일을 읽어오는 식으로 구현해도 좋습니까? (만약 실제 매핑 테이블이 없다면 임시로 매핑하는 안전장치를 백엔드에 마련해 두겠습니다.)
+### Approach 3: Wrap Blocking Calls with `asyncio.to_thread`
+Keep the `async def` signatures but explicitly wrap the blocking code segments (the Neo4j queries and the `urlopen` definitions) in `asyncio.to_thread(...)`.
+* **Pros:** Keeps the async route signature.
+* **Cons:** Makes the code more verbose and harder to maintain compared to Approach 1.
 
----
-**Status:** ⏳ Waiting for your decision (이 기획 방향에 동의하신다면 '승인' 버튼이나 멘트를 달아 주십시오. 승인 후 즉시 Task Plan을 짜서 개발에 착수하겠습니다!)
+## 3. Implementation Plan (Phase 1)
+We will proceed with **Approach 1** due to its minimal footprint and maximum stability.
+
+1. **Modify `src/web_app.py`:**
+   - Change `async def get_index():` to `def get_index():`
+   - Change `async def get_graph(type: str = "record"):` to `def get_graph(type: str = "record"):`
+   - Change `async def process_chat(req: ChatRequest):` to `def process_chat(req: ChatRequest):`
+   - Change `async def get_document(doc_id: str):` to `def get_document(doc_id: str):`
+2. **Restart the Uvicorn Process:** 
+   - Terminate the currently hung process (Already Done).
+   - Ensure `uvicorn` restarts smoothly with `--reload` or explicitly start it.
+3. **Verify Functionality:** 
+   - Ensure the server processes parallel requests correctly without locking up.
+
+## 4. User Approval Required
+Please review the problem analysis and confirm if **Approach 1** is acceptable ("Approved" or "LGTM"). Once approved, we will proceed to Phase 2 (Write Plan).

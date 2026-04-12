@@ -1,36 +1,24 @@
-# 📝 Phase 9: Task Plan (기록물 목록 뷰 및 원문 조회 기능)
+# Task Plan - 8006 Service Hang Fix
 
-**Goal:** 그래프 DB의 맥락 검색 엔진을 활용하면서도, 실시간으로 레코드를 표(Table) 형태로 조회하고 원문 텍스트(.txt)까지 읽을 수 있는 파이프라인 개발.
+## Context
+Based on the approved Approach 1 from the Brainstorming Phase (@01_brainstorm.md), we will correct the event loop blocking issue by transforming all concurrent API handlers from `async def` to regular `def`. FastAPI will then manage them automatically via its internal thread pool. Finally, the service needs to be safely restarted and everything pushed to GitHub.
 
----
+## Potential Breaking Changes
+- Since we are simply removing `async` keywords from synchronous-style endpoint code that does not use `await`, there should be zero breaking changes to API consumers. 
+- Local service performance may slightly change due to ThreadPool load, but stability will infinitely improve compared to the prior event loop deadlock.
 
-## 📅 Task List
+## Task Breakdown
 
-### [ ] Task 1: 백엔드 - 원문 데이터 연람 API 구축 (`src/web_app.py`)
-- FastAPI에 `@app.get("/api/document/{doc_id}")` 엔드포인트를 추가합니다.
-- 서버 로컬의 `sample_records/` 폴더를 탐색하여 전달받은 `doc_id`와 매칭되는 `document_{doc_id}.txt` 파일을 읽어 반환합니다.
-- 파일이 없을 경우를 대비한 404/안전 예외 처리 로직(Fallback)을 작성합니다.
+### 1. Code Fixes (Atomic Refactoring)
+- [x] 1.1 In `src/web_app.py`, change `async def get_index():` to `def get_index():`.
+- [x] 1.2 In `src/web_app.py`, change `async def get_graph(type: str = "record"):` to `def get_graph(type: str = "record"):`.
+- [x] 1.3 In `src/web_app.py`, change `async def process_chat(req: ChatRequest):` to `def process_chat(req: ChatRequest):`.
+- [x] 1.4 In `src/web_app.py`, change `async def get_document(doc_id: str):` to `def get_document(doc_id: str):`.
 
-### [ ] Task 2: 프론트엔드 - 뷰 모드 토글 UI (`templates/index.html`)
-- 화면 우상단(도움말 버튼 옆)에 [그래프 뷰 🕸️] / [목록 뷰 📋] 전환 버튼을 추가합니다.
-- 토글 시 기존 `#network` 캔버스를 숨기고 `#listView`를 표시(혹은 그 반대)하는 JS 로직을 연동합니다.
+### 2. Service Restart & Verification
+- [x] 2.1 Start the `uvicorn src.web_app:app --host 0.0.0.0 --port 8006 --reload` background process with `nohup` (saving logs to `web_app.log`).
+- [x] 2.2 Verify the `/` and `/api/graph` endpoints using `curl` to ensure the server correctly responds without hanging.
 
-### [ ] Task 3: 프론트엔드 - 검색 결과의 렌더링 (목록 뷰)
-- 기존 `searchData()`에서 그래프에 던지는 데이터를 재활용합니다.
-- `RecordResource` 타입의 노드들만 추출하여, HTML 데이타 그리드 테이블(`<table>`)로 렌더링합니다.
-- 테이블의 제목 열 클릭 시 **Task 6(원문 뷰어)**을 띄우는 이벤트를 바인딩합니다.
-
-### [ ] Task 4: 프론트엔드 - 그래프 노드 클릭 팝업 이벤트
-- Vis.js의 `network.on("click")` 이벤트를 가로챕니다.
-- 노드 클릭 시 화면에 작은 스마트 팝업(Floating Label)을 띄우고, **[기록물 조회하기]** 버튼을 노출합니다.
-
-### [ ] Task 5: 프론트엔드 - 관련 기록물 모달(Modal) 뷰
-- Task 4에서 [기록물 조회하기]를 누르면, 현재 클릭된 대상(예: OLYMPIC, 혹은 정은경)과 **연결선(Edge)이 존재하는 기록물 노드들만 필터링**하여 깔끔한 모달 창 목록에 출력합니다.
-
-### [ ] Task 6: 프론트엔드 - 원문 텍스트 뷰어 (Full-Text Viewer)
-- 목록 뷰나 연관 기록물 모달 창에서 기록물 제목을 클릭하면, **전체화면 오버레이 뷰어**를 띄웁니다.
-- Javascript `fetch()`를 이용해 `/api/document/...` (Task 1 백엔드)를 비동기 호출합니다.
-- 가져온 오리지널 파일의 텍스트와 노드의 메타데이터를 통합하여 예쁘게 문서 뷰어 서식으로 렌더링합니다.
-
----
-**Status:** ⏳ Waiting for Approval (이 작업 계획서의 방향성이 완벽해 보인다면 "승인"해주십시오! 즉시 Red-Green-Refactor 방식의 코딩(TDD 방식)에 진입하겠습니다!)
+### 3. Version Control (GitHub Push)
+- [x] 3.1 `git add src/web_app.py` and commit with a clear message explaining the asyncio block fix.
+- [x] 3.2 `git push` to synchronize changes to the remote GitHub repository.
