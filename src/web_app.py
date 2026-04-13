@@ -96,10 +96,10 @@ def process_chat(req: ChatRequest):
             with urllib.request.urlopen(req_url, timeout=60) as response:
                 llm_res = json.loads(response.read().decode("utf-8"))
                 text = llm_res['choices'][0]['message']['content'].strip()
-                # 모델 내부 사고(thought) 첫 줄 제거
+                # 모델 내부 사고(thought) 줄 제거: "thought", "a thought", "my thought" 등
                 lines = text.splitlines()
-                if lines and lines[0].strip().lower() == "thought":
-                    text = "\n".join(lines[1:]).strip()
+                filtered = [l for l in lines if not l.strip().lower().replace('a ', '').replace('my ', '').startswith('thought')]
+                text = "\n".join(filtered).strip()
                 return text
         except Exception as e:
             return None
@@ -140,8 +140,8 @@ def process_chat(req: ChatRequest):
             for k in keywords:
                 # 연도 키워드 정규화: "2008년" → "2008"
                 k_normalized = k.rstrip('년') if k.rstrip('년').isdigit() else k
-                q = f"MATCH (n) WHERE labels(n)[0] IN {labels_filter} AND coalesce(n.name, n.id) CONTAINS '{k_normalized}' RETURN id(n) as nid"
-                res = client.execute_query(q)
+                q = f"MATCH (n) WHERE labels(n)[0] IN {labels_filter} AND coalesce(n.name, n.id) CONTAINS $kw RETURN id(n) as nid"
+                res = client.execute_query(q, {"kw": k_normalized})
                 nids = [r['nid'] for r in res]
                 if nids:
                     matched_node_groups.append(nids)

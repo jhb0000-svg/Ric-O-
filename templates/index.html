@@ -477,9 +477,15 @@
                             if (adjacency[root]) {
                                 adjacency[root].forEach(neighbor => {
                                     finalVisibleNodes.add(neighbor);
-                                    // 2-hop expansion to show the record's full context (Year, Org, File etc.)
-                                    if (adjacency[neighbor]) {
-                                        adjacency[neighbor].forEach(n2 => finalVisibleNodes.add(n2));
+                                    // 2-hop: RecordResource 제외, 메타데이터 노드만 확장
+                                    var neighborNode = nodesDataSet.get(neighbor);
+                                    if (adjacency[neighbor] && neighborNode && neighborNode.nodeType !== 'RecordResource') {
+                                        adjacency[neighbor].forEach(n2 => {
+                                            var n2Node = nodesDataSet.get(n2);
+                                            if (n2Node && n2Node.nodeType !== 'RecordResource') {
+                                                finalVisibleNodes.add(n2);
+                                            }
+                                        });
                                     }
                                 });
                             }
