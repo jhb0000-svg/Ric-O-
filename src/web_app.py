@@ -9,7 +9,7 @@ app = FastAPI(title="RiC-O Graph Viewer")
 def get_db():
     uri = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
     user = os.environ.get("NEO4J_USER", "neo4j")
-    password = os.environ.get("NEO4J_PASSWORD", "password")
+    password = os.environ.get("NEO4J_PASSWORD", "rms_password")
     if os.environ.get("TEST_MODE") == "1":
         return None
     try:

@@ -41,8 +41,8 @@ def main():
     # Initialize Neo4j Client (Using env vars or defaults)
     uri = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
     user = os.environ.get("NEO4J_USER", "neo4j")
-    password = os.environ.get("NEO4J_PASSWORD", "password")
-    
+    password = os.environ.get("NEO4J_PASSWORD", "rms_password")
+
     # Check if we should actually connect to Neo4j. In test mode we might skip it.
     if os.environ.get("TEST_MODE") == "1":
         print("Running in TEST_MODE. Skipping Neo4j connection.")
